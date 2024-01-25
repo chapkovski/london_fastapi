@@ -17,6 +17,7 @@ class HumanTrader:
         self.transaction_history = self.generate_initial_history()
         self.shares = 0  # Initialize shares
         self.cash = 10000  # Initialize
+
     @property
     def own_orders(self):
         # Filter and return orders that belong to the human trader
@@ -99,7 +100,6 @@ class HumanTrader:
         new_orders = pd.DataFrame(bid_orders + ask_orders)
         self.orders_df = pd.concat([self.orders_df, new_orders], ignore_index=True)
 
-
     def generate_initial_history(self, interval=10, num_entries=10):
         # Get the current time
         current_time = time.time()
@@ -145,6 +145,7 @@ class HumanTrader:
     def calculate_inventory(self):
         # Return the actual inventory
         return {'shares': self.shares, 'cash': self.cash}
+
     async def run(self):
         n = 5  # Interval in seconds
         while True:
@@ -174,8 +175,8 @@ class HumanTrader:
 
     def execute_orders(self):
         # Filter active bids and asks
-        active_bids = self.orders_df[(self.orders_df['type'] == 'bid') & (self.orders_df['status'] == 'active')]
-        active_asks = self.orders_df[(self.orders_df['type'] == 'ask') & (self.orders_df['status'] == 'active')]
+        active_bids = self.active_orders[self.active_orders['type'] == 'bid']
+        active_asks = self.active_orders[self.active_orders['type'] == 'ask']
 
         # Sort bids and asks by price and timestamp
         active_bids = active_bids.sort_values(by=['price', 'timestamp'], ascending=[False, True])
@@ -191,16 +192,16 @@ class HumanTrader:
             bid_index = active_bids.index[0]
             ask_index = active_asks.index[0]
 
-            # Check if the human trader's bid order is executed
+            # Check if the human trader's bid or ask order is executed
             if bid_index in self.own_orders.index:
                 self.shares += self.orders_df.at[bid_index, 'quantity']
                 self.cash -= executed_price * self.orders_df.at[bid_index, 'quantity']
 
-            # Check if the human trader's ask order is executed
             if ask_index in self.own_orders.index:
                 self.shares -= self.orders_df.at[ask_index, 'quantity']
                 self.cash += executed_price * self.orders_df.at[ask_index, 'quantity']
 
+            # Decrease the quantity and update status
             self.orders_df.at[bid_index, 'quantity'] -= 1
             self.orders_df.at[ask_index, 'quantity'] -= 1
 
@@ -210,9 +211,8 @@ class HumanTrader:
                 self.orders_df.at[ask_index, 'status'] = 'executed'
 
             # Refresh active bids and asks
-            active_bids = self.orders_df[(self.orders_df['type'] == 'bid') & (self.orders_df['status'] == 'active')]
-            active_asks = self.orders_df[(self.orders_df['type'] == 'ask') & (self.orders_df['status'] == 'active')]
-
+            active_bids = self.active_orders[self.active_orders['type'] == 'bid']
+            active_asks = self.active_orders[self.active_orders['type'] == 'ask']
 
     def calculate_new_order_price(self):
         # Implement logic to calculate the price of the new order
@@ -239,20 +239,34 @@ class HumanTrader:
         Handle incoming messages to add new orders and check for executions.
         """
         try:
-            data = json.loads(message)
-            action_type = data.get('type')
+            json_message= json.loads(message)
+            action_type = json_message.get('type')
+            data= json_message.get('data')
             print('*' * 50)
-            print(f"Received message: {message}")
+            print(f"Received message: {json_message}")
             if action_type in ['aggressiveAsk', 'passiveAsk', 'aggressiveBid', 'passiveBid']:
                 print('are we gonna process?')
                 self.process_order(action_type)
                 self.execute_orders()
                 await self.send_message('update')
-
+            elif action_type == 'cancel':
+                order_uuid = data.get('uuid')
+                print(f'Cancelling order: {order_uuid}')
+                await self.cancel_order(order_uuid)
             else:
                 print(f"Invalid message format: {message}")
         except json.JSONDecodeError:
             print(f"Error decoding message: {message}")
+
+    async def cancel_order(self, order_uuid):
+        # Check if the order UUID exists in the DataFrame
+        if order_uuid in self.orders_df['uuid'].values:
+            # Set the status of the order to 'cancelled'
+            self.orders_df.loc[self.orders_df['uuid'] == order_uuid, 'status'] = 'cancelled'
+            await self.send_message('update')
+        else:
+            # Handle the case where the order UUID does not exist
+            print(f"Order with UUID {order_uuid} not found.")
 
     def process_order(self, action_type):
         # Get the current order book
