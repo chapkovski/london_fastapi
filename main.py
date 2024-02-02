@@ -2,15 +2,17 @@ from fastapi import FastAPI, WebSocket, HTTPException, WebSocketDisconnect
 from human_trader import HumanTrader
 from fastapi.middleware.cors import CORSMiddleware
 import uuid
+from structs import TraderCreationData
 
 class TraderManager:
     def __init__(self):
         self.traders = {}
 
-    def create_new_trader(self):
-        trader = HumanTrader()
+    def create_new_trader(self, trader_data: TraderCreationData):
+        trader = HumanTrader(trader_data)
         self.traders[trader.uuid] = trader
         return trader
+
 
     def get_trader(self, trader_uuid):
         return self.traders.get(trader_uuid)
@@ -29,6 +31,33 @@ app.add_middleware(
 
 
 trader_manager = TraderManager()
+
+
+@app.get("/traders/defaults")
+async def get_trader_defaults():
+    # Get the schema of the model
+    schema = TraderCreationData.schema()
+
+    # Extract default values from the schema
+    defaults = {field: props.get("default") for field, props in schema.get("properties", {}).items() if
+                "default" in props}
+
+    return {
+        "status": "success",
+        "data": defaults
+    }
+
+
+@app.post("/traders/create")
+async def create_trader(trader_data: TraderCreationData):
+    new_trader = trader_manager.create_new_trader(trader_data)
+    return {
+        "status": "success",
+        "message": "New trader created",
+        "data": {"trader_uuid": new_trader.uuid}
+    }
+
+
 
 @app.websocket("/trader/{trader_uuid}")
 async def websocket_trader_endpoint(websocket: WebSocket, trader_uuid: str):
@@ -64,14 +93,6 @@ async def websocket_trader_endpoint(websocket: WebSocket, trader_uuid: str):
     except WebSocketDisconnect:
         trader.stop_updates()
         # Additional disconnection handling (logging, cleanup, etc.)
-@app.post("/traders/create")
-async def create_trader():
-    new_trader = trader_manager.create_new_trader()
-    return {
-        "status": "success",
-        "message": "New trader created",
-        "data": {"trader_uuid": new_trader.uuid}
-    }
 
 @app.get("/traders/list")
 async def list_traders():

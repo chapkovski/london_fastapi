@@ -4,19 +4,26 @@ import random
 import time
 import json
 import pandas as pd
-
+from structs import TraderCreationData
 
 class HumanTrader:
     websocket = None
 
-    def __init__(self):
+    def __init__(self, trader_data: TraderCreationData):
         self.uuid = str(uuid.uuid4())
         self.update_task = None
         self.orders_df = pd.DataFrame(columns=['uuid', 'timestamp', 'type', 'price', 'quantity', 'status', 'owner'])
         self.generate_initial_order_book()
         self.transaction_history = self.generate_initial_history()
-        self.shares = 0  # Initialize shares
-        self.cash = 10000  # Initialize
+
+        # Use parameters from TraderCreationData
+        self.shares = trader_data.initial_shares
+        self.cash = trader_data.initial_cash
+        self.max_short_shares = trader_data.max_short_shares
+        self.max_short_cash = trader_data.max_short_cash
+        self.trading_day_duration = trader_data.trading_day_duration
+        self.max_active_orders = trader_data.max_active_orders
+        self.noise_trader_update_freq = trader_data.noise_trader_update_freq
 
     @property
     def own_orders(self):
@@ -147,7 +154,7 @@ class HumanTrader:
         return {'shares': self.shares, 'cash': self.cash}
 
     async def run(self):
-        n = 5  # Interval in seconds
+        n = self.noise_trader_update_freq
         while True:
             print('PERIODIC UPDATE')
             self.generate_order()
