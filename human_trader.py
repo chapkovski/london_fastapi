@@ -5,6 +5,10 @@ import time
 import json
 import pandas as pd
 from structs import TraderCreationData
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class HumanTrader:
     websocket = None
@@ -190,9 +194,11 @@ class HumanTrader:
         active_asks = active_asks.sort_values(by=['price', 'timestamp'], ascending=[True, True])
 
         # Execute orders
-        while not active_bids.empty and not active_asks.empty and active_bids.iloc[0]['price'] >= active_asks.iloc[0]['price']:
+        while not active_bids.empty and not active_asks.empty and active_bids.iloc[0]['price'] >= active_asks.iloc[0][
+            'price']:
             # Determine the price of the earliest order
-            executed_price = active_bids.iloc[0]['price'] if active_bids.iloc[0]['timestamp'] < active_asks.iloc[0]['timestamp'] else active_asks.iloc[0]['price']
+            executed_price = active_bids.iloc[0]['price'] if active_bids.iloc[0]['timestamp'] < active_asks.iloc[0][
+                'timestamp'] else active_asks.iloc[0]['price']
             self.transaction_history.append({'price': executed_price, 'timestamp': time.time()})
 
             # Update the quantities and status in the DataFrame
@@ -246,9 +252,9 @@ class HumanTrader:
         Handle incoming messages to add new orders and check for executions.
         """
         try:
-            json_message= json.loads(message)
+            json_message = json.loads(message)
             action_type = json_message.get('type')
-            data= json_message.get('data')
+            data = json_message.get('data')
             # let's check if we have a function that can deal with this action type
 
             print('*' * 50)
@@ -272,6 +278,7 @@ class HumanTrader:
                 print(f"Invalid message format: {message}")
         except json.JSONDecodeError:
             print(f"Error decoding message: {message}")
+
     # let's deal with the follwing incoming data to add orders:
     # {"type":"add_order","data":{"type":"ask","price":10048,"quantity":1}}
     async def handle_add_order(self, data):
@@ -295,28 +302,28 @@ class HumanTrader:
         price = None
 
         if action_type == 'aggressiveAsk':
-            # Aggressive Ask: Put an ask at the best bid level for immediate execution
+            logger.info("# Aggressive Ask: Put an ask at the best bid level for immediate execution")
             if current_order_book['bids']:
                 price = current_order_book['bids'][0]['x']
         elif action_type == 'passiveAsk':
-            # Passive Ask: Put an ask at the existing best ask level
+            logger.info("# Passive Ask: Put an ask at the existing best ask level")
             if current_order_book['asks']:
                 price = current_order_book['asks'][0]['x']
             else:
                 price = self.default_ask_price()
         elif action_type == 'aggressiveBid':
-            # Aggressive Bid: Put a bid at the best ask level for immediate execution
+            logger.info("# Aggressive Bid: Put a bid at the best ask level for immediate execution")
             if current_order_book['asks']:
                 price = current_order_book['asks'][0]['x']
         elif action_type == 'passiveBid':
-            # Passive Bid: Put a bid at the existing best bid level
+            logger.info("# Passive Bid: Put a bid at the existing best bid level")
             if current_order_book['bids']:
                 price = current_order_book['bids'][0]['x']
             else:
                 price = self.default_bid_price()
 
         if price is not None:
-            order_type= 'Ask' if 'Ask' in action_type else 'Bid'
+            order_type = 'ask' if 'Ask' in action_type else 'bid'
             self.add_order(order_type, price)
 
     def default_ask_price(self):
