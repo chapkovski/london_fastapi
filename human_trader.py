@@ -249,9 +249,17 @@ class HumanTrader:
             json_message= json.loads(message)
             action_type = json_message.get('type')
             data= json_message.get('data')
+            # let's check if we have a function that can deal with this action type
+
             print('*' * 50)
             print(f"Received message: {json_message}")
-            if action_type in ['aggressiveAsk', 'passiveAsk', 'aggressiveBid', 'passiveBid']:
+            handler = getattr(self, f'handle_{action_type}', None)
+            if handler:
+                await handler(data)
+                self.execute_orders()
+                await self.send_message('update')
+                # todo: not the best solution above but let's think later about it
+            elif action_type in ['aggressiveAsk', 'passiveAsk', 'aggressiveBid', 'passiveBid']:
                 print('are we gonna process?')
                 self.process_order(action_type)
                 self.execute_orders()
@@ -264,6 +272,12 @@ class HumanTrader:
                 print(f"Invalid message format: {message}")
         except json.JSONDecodeError:
             print(f"Error decoding message: {message}")
+    # let's deal with the follwing incoming data to add orders:
+    # {"type":"add_order","data":{"type":"ask","price":10048,"quantity":1}}
+    async def handle_add_order(self, data):
+        order_type = data.get('type')
+        price = data.get('price')
+        self.add_order(order_type, price)
 
     async def cancel_order(self, order_uuid):
         # Check if the order UUID exists in the DataFrame
@@ -302,8 +316,8 @@ class HumanTrader:
                 price = self.default_bid_price()
 
         if price is not None:
-            print('adding order')
-            self.add_order(action_type, price)
+            order_type= 'Ask' if 'Ask' in action_type else 'Bid'
+            self.add_order(order_type, price)
 
     def default_ask_price(self):
         # Define a default ask price if there are no asks in the order book
@@ -314,10 +328,11 @@ class HumanTrader:
         return 9500  # Example value, adjust as needed
 
     def add_order(self, order_type, price, owner='human'):
+
         new_order = {
             'uuid': str(uuid.uuid4()),
             'timestamp': time.time(),
-            'type': 'ask' if 'Ask' in order_type else 'bid',
+            'type': order_type,
             'price': price,
             'quantity': 1,
             'status': 'active',
