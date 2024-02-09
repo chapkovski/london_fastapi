@@ -9,7 +9,7 @@ class TraderCreationData(BaseModel):
     max_active_orders: int = Field(default=5, description="Maximum amount of active orders")
     noise_trader_update_freq: int = Field(default=10, description="Frequency of noise traders' updates in seconds")
     step: int = Field(default=100, description="Step for new orders")
-
+    extra_info_treatment: bool = Field(default=False, description="Extra info treatment")
     class Config:
         schema_extra = {
             "example": {
@@ -20,6 +20,7 @@ class TraderCreationData(BaseModel):
                 "trading_day_duration": 5,  # Representing 8 hours in minutes
                 "max_active_orders": 5,
                 "noise_trader_update_freq": 10,  # in seconds,
-                "step": 100
+                "step": 100,
+                "extra_info_treatment": False
             }
         }
